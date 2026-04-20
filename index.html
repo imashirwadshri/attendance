@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BEU Attendance Tracker</title>
 
-<!-- PWA -->
-<link rel="manifest" href="manifest.json">
-
 <style>
 *{box-sizing:border-box;font-family:'Poppins',sans-serif}
 
@@ -40,9 +37,25 @@ canvas{
   box-shadow:0 0 25px rgba(255,215,0,.25);
 }
 
-h1{text-align:center;color:#ffd700;margin-bottom:8px}
-#top{text-align:center;margin-bottom:8px;font-size:14px;font-weight:bold;color:#ccc}
-.sub{text-align:center;color:#ffd700;margin-bottom:15px}
+h1{
+  text-align:center;
+  color:#ffd700;
+  margin-bottom:8px;
+}
+
+#top{
+  text-align:center;
+  margin-bottom:8px;
+  font-size:14px;
+  font-weight:bold;
+  color:#ccc;
+}
+
+.sub{
+  text-align:center;
+  color:#ffd700;
+  margin-bottom:15px;
+}
 
 label{display:block;margin-top:14px;margin-bottom:4px}
 
@@ -92,7 +105,7 @@ button{
 
 <h1>BEU ATTENDANCE TRACKER</h1>
 <div id="top"></div>
-<div class="sub">Design by Ashirwad Shrivastava</div>
+<div class="sub">Design by Bihari </div>
 
 <div id="setup"></div>
 <div id="main" style="display:none"></div>
@@ -102,39 +115,18 @@ button{
 <div id="result"></div>
 </div>
 
+<!-- ✅ ONLY RESET BUTTON -->
 <button onclick="resetData()">Reset Month</button>
-
-<!-- 🔥 INSTALL BUTTON -->
-<button id="installBtn" style="display:none">Install App</button>
 
 </div>
 
 <script>
 
-// INSTALL APP
-let deferredPrompt;
-
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  document.getElementById("installBtn").style.display = "block";
-});
-
-document.getElementById("installBtn").addEventListener("click", async () => {
-  if (!deferredPrompt) return;
-
-  deferredPrompt.prompt();
-  await deferredPrompt.userChoice;
-
-  deferredPrompt = null;
-  document.getElementById("installBtn").style.display = "none";
-});
-
-// TIME
+// LIVE TIME
 function updateTime(){
   let d = new Date();
-  let day = d.toLocaleDateString('en-US',{weekday:'long'});
 
+  let day = d.toLocaleDateString('en-US',{weekday:'long'});
   let date = String(d.getDate()).padStart(2,'0') + "/" +
              String(d.getMonth()+1).padStart(2,'0') + "/" +
              d.getFullYear();
@@ -146,7 +138,10 @@ function updateTime(){
   let ampm = h >= 12 ? "PM" : "AM";
   h = h % 12 || 12;
 
-  let time = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${ampm}`;
+  let time =
+    String(h).padStart(2,'0') + ":" +
+    String(m).padStart(2,'0') + ":" +
+    String(s).padStart(2,'0') + " " + ampm;
 
   document.getElementById("top").innerHTML =
     `<span style="color:#ffd700">${day}</span> | ${date} | ${time}`;
@@ -160,6 +155,7 @@ function set(d){localStorage.setItem('beu',JSON.stringify(d))}
 function init(){
  updateTime();
  setInterval(updateTime,1000);
+
  if(!get()) setup1(); else loadMain();
 }
 
@@ -168,14 +164,17 @@ function setup1(){
  setup.innerHTML=`
  <label>Total Subjects</label>
  <input id='count' type='number' max='8'>
+
  <label>Working Days</label>
  <input id='days' type='number' max='25'>
+
  <button onclick='setup2()'>Next</button>`;
 }
 
 function setup2(){
  let c=+count.value;
  let d=+days.value;
+
  if(!c||!d)return alert('Fill all');
  if(c>8)return alert('Max 8 subjects');
  if(d>25)return alert('Max 25 days');
@@ -184,6 +183,7 @@ function setup2(){
  for(let i=0;i<c;i++){
    html+=`<label>Subject ${i+1}</label><input id='s${i}'>`;
  }
+
  html+=`<button onclick='saveSetup(${c},${d})'>Start</button>`;
  setup.innerHTML=html;
 }
@@ -242,4 +242,170 @@ function loadMain(){
  show();
 }
 
-// बाकी code same (save, calc, background etc.)
+// BIOMETRIC
+function handleBiometric(){
+ let bio=document.getElementById("bio").value;
+
+ document.querySelectorAll("[id^='sub']").forEach(s=>{
+   let present=s.querySelector("option[value='1']");
+   present.disabled = (bio=="0");
+ });
+}
+
+// LIMIT
+function limitSubjects(){
+ let count=0;
+ document.querySelectorAll("[id^='sub']").forEach(s=>{
+  if(s.value!=='') count++;
+ });
+
+ document.querySelectorAll("[id^='sub']").forEach(s=>{
+  if(count>=3 && s.value==='') s.disabled=true;
+  else s.disabled=false;
+ });
+
+ msg.innerText = count===3 ? "✔ 3 Subjects Selected" : "";
+}
+
+// SAVE
+function save(){
+ let d=get();
+ let t = new Date().toDateString();
+
+ if(d.saved[t]) return alert('Already saved today');
+
+ let bioVal=document.getElementById('bio').value;
+ if(bioVal==='') return alert('Select biometric');
+
+ let bio=+bioVal;
+ d.totalDays++;
+ if(bio)d.presentDays++;
+
+ let count=0;
+ let entry={bio};
+
+ d.subjects.forEach((_,i)=>{
+   let v=document.getElementById('sub'+i).value;
+
+   if(v!==''){
+     count++;
+
+     if(bio===0) v=0;
+     else v=+v;
+
+     d.subjectData[i].t++;
+     if(v===1)d.subjectData[i].p++;
+
+     entry['s'+i]=v;
+   }
+ });
+
+ if(count!==3)return alert('Select exactly 3 subjects');
+
+ d.saved[t]=entry;
+ set(d);
+ location.reload();
+}
+
+// CALC
+function per(p,t){return t?((p/t)*100):0}
+function need75(p,t){return Math.max(0,Math.ceil(0.75*t)-p)}
+
+// SHOW
+function show(){
+ let d=get(); if(!d)return;
+
+ let html="";
+
+ let p=d.presentDays;
+ let t=d.totalDays;
+ let perVal=per(p,t);
+
+ let warn=(t>0 && perVal<75)?"red":"";
+
+ html+=`<div class='${warn}'>
+ <b>Biometric</b><br>
+ Total: ${t} | Present: ${p} | Absent: ${t-p}<br>
+ ${perVal.toFixed(1)}% | Need: ${need75(p,t)}
+ </div><br>`;
+
+ d.subjects.forEach((s,i)=>{
+  let p=d.subjectData[i].p;
+  let t=d.subjectData[i].t;
+  let perVal=per(p,t);
+
+  let warn=(t>0 && perVal<75)?"red":"";
+
+  html+=`<div class='${warn}'>
+  <b>${s}</b><br>
+  Total: ${t} | Present: ${p} | Absent: ${t-p}<br>
+  ${perVal.toFixed(1)}% | Need: ${need75(p,t)}
+  </div><br>`;
+ });
+
+ result.innerHTML=html;
+}
+
+// RESET
+function resetData(){
+ if(!confirm("Reset all data?")) return;
+ localStorage.removeItem("beu");
+ location.reload();
+}
+
+// BACKGROUND
+const canvas=document.getElementById("bg");
+const ctx=canvas.getContext("2d");
+
+function resize(){
+ canvas.width=window.innerWidth;
+ canvas.height=window.innerHeight;
+}
+resize();
+window.addEventListener("resize",resize);
+
+let pts=[];
+for(let i=0;i<60;i++){
+ pts.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,vx:(Math.random()-0.5),vy:(Math.random()-0.5)});
+}
+
+function animate(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ pts.forEach(p=>{
+  p.x+=p.vx;
+  p.y+=p.vy;
+
+  if(p.x<0||p.x>canvas.width)p.vx*=-1;
+  if(p.y<0||p.y>canvas.height)p.vy*=-1;
+
+  ctx.fillStyle="#ffd700";
+  ctx.fillRect(p.x,p.y,2,2);
+ });
+
+ for(let i=0;i<pts.length;i++){
+  for(let j=i+1;j<pts.length;j++){
+   let dx=pts[i].x-pts[j].x;
+   let dy=pts[i].y-pts[j].y;
+   let dist=Math.sqrt(dx*dx+dy*dy);
+
+   if(dist<100){
+    ctx.strokeStyle="rgba(255,215,0,0.2)";
+    ctx.beginPath();
+    ctx.moveTo(pts[i].x,pts[i].y);
+    ctx.lineTo(pts[j].x,pts[j].y);
+    ctx.stroke();
+   }
+  }
+ }
+
+ requestAnimationFrame(animate);
+}
+
+animate();
+
+init();
+</script>
+
+</body>
+</html>
