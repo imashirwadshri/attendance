@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BEU Attendance Tracker</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+
+<style>
+*{box-sizing:border-box;font-family:'Poppins',sans-serif}
+
+body{
+  margin:0;
+  background:#000;
+  color:#fff;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+}
+
+canvas{
+  position:fixed;
+  top:0;
+  left:0;
+  z-index:0;
+}
+
+.container{
+  position:relative;
+  z-index:2;
+  width:92%;
+  max-width:520px;
+  background:rgba(255,255,255,0.05);
+  border-radius:20px;
+  padding:25px 20px;
+  border:1px solid rgba(255,215,0,.4);
+  box-shadow:0 0 25px rgba(255,215,0,.25);
+}
+
+h1{text-align:center;color:#ffd700;margin-bottom:8px}
+#top{text-align:center;margin-bottom:8px;font-size:14px;font-weight:bold;color:#ccc}
+.sub{text-align:center;color:#ffd700;margin-bottom:15px}
+
+label{display:block;margin-top:14px;margin-bottom:4px}
+
+input,select{
+  width:100%;
+  padding:12px;
+  border-radius:12px;
+  border:1px solid #ffd700;
+  background:#000;
+  color:#fff;
+  margin-bottom:10px;
+}
+
+select:disabled{
+  opacity:0.4;
+  cursor:not-allowed;
+}
+
+button{
+  width:100%;
+  padding:12px;
+  margin-top:12px;
+  border:none;
+  border-radius:12px;
+  background:#ffd700;
+  color:#000;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.result{
+  margin-top:20px;
+  border-top:1px solid #444;
+  padding-top:12px;
+}
+
+.red{color:red;font-weight:bold}
+#msg{margin-top:5px;color:#00ff99;font-size:13px}
+</style>
+</head>
+
+<body>
+
+<canvas id="bg"></canvas>
+
+<div class="container">
+
+<h1>BEU ATTENDANCE TRACKER</h1>
+<div id="top"></div>
+<div class="sub">Design by Ashirwad Shrivastava</div>
+
+<div id="setup"></div>
+<div id="main" style="display:none"></div>
+
+<div class="result">
+<b>Attendance Information</b>
+<div id="result"></div>
+</div>
+
+<button onclick="resetData()">Reset Month</button>
+
+<!-- 🔥 INSTALL BUTTON -->
+<button id="installBtn" style="display:none">Install App</button>
+
+</div>
+
+<script>
+
+// INSTALL APP
+let deferredPrompt;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById("installBtn").style.display = "block";
+});
+
+document.getElementById("installBtn").addEventListener("click", async () => {
+  if (!deferredPrompt) return;
+
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+
+  deferredPrompt = null;
+  document.getElementById("installBtn").style.display = "none";
+});
+
+// TIME
+function updateTime(){
+  let d = new Date();
+  let day = d.toLocaleDateString('en-US',{weekday:'long'});
+
+  let date = String(d.getDate()).padStart(2,'0') + "/" +
+             String(d.getMonth()+1).padStart(2,'0') + "/" +
+             d.getFullYear();
+
+  let h = d.getHours();
+  let m = d.getMinutes();
+  let s = d.getSeconds();
+
+  let ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+
+  let time = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} ${ampm}`;
+
+  document.getElementById("top").innerHTML =
+    `<span style="color:#ffd700">${day}</span> | ${date} | ${time}`;
+}
+
+// STORAGE
+function get(){return JSON.parse(localStorage.getItem('beu'))||null}
+function set(d){localStorage.setItem('beu',JSON.stringify(d))}
+
+// INIT
+function init(){
+ updateTime();
+ setInterval(updateTime,1000);
+ if(!get()) setup1(); else loadMain();
+}
+
+// SETUP
+function setup1(){
+ setup.innerHTML=`
+ <label>Total Subjects</label>
+ <input id='count' type='number' max='8'>
+ <label>Working Days</label>
+ <input id='days' type='number' max='25'>
+ <button onclick='setup2()'>Next</button>`;
+}
+
+function setup2(){
+ let c=+count.value;
+ let d=+days.value;
+ if(!c||!d)return alert('Fill all');
+ if(c>8)return alert('Max 8 subjects');
+ if(d>25)return alert('Max 25 days');
+
+ let html='';
+ for(let i=0;i<c;i++){
+   html+=`<label>Subject ${i+1}</label><input id='s${i}'>`;
+ }
+ html+=`<button onclick='saveSetup(${c},${d})'>Start</button>`;
+ setup.innerHTML=html;
+}
+
+function isValidName(name){
+ return /^[A-Za-z ]+$/.test(name);
+}
+
+function saveSetup(c,d){
+ let subs=[];
+ for(let i=0;i<c;i++){
+   let val=document.getElementById('s'+i).value;
+   if(!isValidName(val)) return alert('Only text allowed');
+   subs.push(val);
+ }
+
+ set({
+  subjects:subs,
+  workingDays:d,
+  totalDays:0,
+  presentDays:0,
+  subjectData:subs.map(()=>({t:0,p:0})),
+  saved:{}
+ });
+
+ loadMain();
+}
+
+// MAIN
+function loadMain(){
+ let data=get();
+ setup.style.display='none';
+ main.style.display='block';
+
+ let html=`<label>Biometric</label>
+ <select id='bio' onchange='handleBiometric()'>
+  <option value=''>Select</option>
+  <option value=1>Present</option>
+  <option value=0>Absent</option>
+ </select>`;
+
+ html+=`<b>Select Any 3 Subjects</b><div id="msg"></div>`;
+
+ data.subjects.forEach((s,i)=>{
+   html+=`<label>${s}</label>
+   <select id='sub${i}' onchange='limitSubjects()'>
+    <option value=''>--</option>
+    <option value=1>Present</option>
+    <option value=0>Absent</option>
+   </select>`;
+ });
+
+ html+=`<button onclick='save()'>Save Today</button>`;
+ main.innerHTML=html;
+
+ show();
+}
+
+// बाकी code same (save, calc, background etc.)
